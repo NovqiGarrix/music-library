@@ -108,8 +108,8 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
         console.log(`-- ${uploadedPath} Saved to DB:`);
         // deno-lint-ignore no-explicit-any
       } catch (error: any) {
-        console.log(`-- ${uploadedPath}: ${error?.stderr}`);
-        console.log(`Keys: ${Object.keys(error)}`);
+        console.log(`-- ${uploadedPath}: ${error}`);
+        // console.log(`Keys: ${Object.keys(error)}`);
       }
     }
   }
