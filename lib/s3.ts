@@ -1,4 +1,3 @@
-import "@std/dotenv/load";
 import { S3Client } from '@hk/s3';
 
 export const s3 = new S3Client({

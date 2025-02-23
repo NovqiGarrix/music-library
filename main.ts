@@ -1,3 +1,5 @@
+import "@std/dotenv/load";
+
 import { ensureDir } from '@std/fs';
 import { OAuth2Client } from "google-auth-library";
 import { google, youtube_v3 } from "googleapis";
@@ -9,12 +11,20 @@ import MusicModel from "./model/MusicModel.ts";
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
 
+const YT_DLP_BINARY_PATH = Deno.env.get("YT_DLP_BINARY_PATH");
+
+if (YT_DLP_BINARY_PATH) {
+  ytDlpWrap.setBinaryPath(YT_DLP_BINARY_PATH);
+}
+
 function downloadAudio(playlistId: string, videoId: string, videoTitle: string) {
   const videoURL = `https://www.youtube.com/watch?v=${videoId}`;
   return new Promise<string>((resolve) => {
     const output = `musics/${playlistId}/${videoTitle}.opus`;
 
-    ytDlpWrap.exec([
+    const customCookies = Deno.env.get("COOKIES_FILE_PATH");
+
+    const execOptions = [
       videoURL,
       '-f', 'ba',
       '-x',
@@ -24,7 +34,13 @@ function downloadAudio(playlistId: string, videoId: string, videoTitle: string) 
       '--embed-thumbnail',
       '--force-overwrite',
       '-o', output
-    ]).on('progress', (progress) => {
+    ];
+
+    if (customCookies) {
+      execOptions.push('--cookies', customCookies);
+    }
+
+    ytDlpWrap.exec(execOptions).on('progress', (progress) => {
       console.log(`-- ${videoTitle}: ${progress.percent}%`);
     }).on('close', (code) => {
       console.log(`-- ${videoTitle}: Finished with code ${code}`);
@@ -135,7 +151,7 @@ async function getPlaylists(auth: OAuth2Client): Promise<void> {
 await mongoose.connect(Deno.env.get("DATABASE_URL")!);
 
 const auth = new OAuth2Client({
-  apiKey: Deno.env.get("DENO_API_KEY")
+  apiKey: Deno.env.get("GOOGLE_API_KEY")
 });
 
 await getPlaylists(auth);
