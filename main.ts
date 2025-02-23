@@ -8,6 +8,8 @@ import YTDlpWrap from 'yt-dlp-wrap';
 import { s3 } from "./lib/s3.ts";
 import MusicModel from "./model/MusicModel.ts";
 
+const kv = await Deno.openKv();
+
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
 
@@ -19,7 +21,7 @@ if (YT_DLP_BINARY_PATH) {
 
 function downloadAudio(playlistId: string, videoId: string, videoTitle: string) {
   const videoURL = `https://www.youtube.com/watch?v=${videoId}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const output = `musics/${playlistId}/${videoTitle}.opus`;
 
     const customCookies = Deno.env.get("COOKIES_FILE_PATH");
@@ -45,7 +47,7 @@ function downloadAudio(playlistId: string, videoId: string, videoTitle: string) 
     }).on('close', (code) => {
       console.log(`-- ${videoTitle}: Finished with code ${code}`);
       resolve(output);
-    })
+    }).once('error', reject);
   })
 }
 
@@ -71,18 +73,23 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
 
     // Loop each video
     for await (const audio of playlistVideos.items!) {
+
+      const channelTitle = audio.snippet?.channelTitle!;
+      const filename = `${audio.snippet?.title?.replaceAll("/", "_")}.opus`;
+      const uploadedPath = `${channelTitle}/${filename}`;
+
       try {
 
         // Check if audio already exists
         const music = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
-        if (music) {
+        const existInKv = (await kv.get<string>(["lastId"])).value === audio.id!;
+        if (music || existInKv) {
           console.log(`${audio.snippet?.title} already exists`);
+          if (!existInKv) {
+            await kv.set(["lastId"], audio.id!);
+          }
           continue;
         }
-
-        const channelTitle = audio.snippet?.channelTitle!;
-        const filename = `${audio.snippet?.title}.opus`;
-        const uploadedPath = `${channelTitle}/${filename}`;
 
         const downloadedPath = await downloadAudio(playlistId, audio.snippet?.resourceId?.videoId!, audio.snippet?.title!);
         const audioFile = await Deno.readFile(downloadedPath);
@@ -103,10 +110,13 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
           ...audio,
           streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
         });
+        await kv.set(["lastId"], audio.id!);
 
         console.log(`-- ${uploadedPath} Saved to DB:`);
-      } catch (error) {
-        console.log(error);
+        // deno-lint-ignore no-explicit-any
+      } catch (error: any) {
+        console.log(`-- ${uploadedPath}: ${error?.stderr}`);
+        console.log(`Keys: ${Object.keys(error)}`);
       }
     }
   }
@@ -139,6 +149,7 @@ async function getPlaylists(auth: OAuth2Client): Promise<void> {
       for await (const playlist of playlists.items!) {
         // Download and upload videos from playlist
         await uploadPlaylistVideos(auth, playlist.id!);
+        await Deno.remove(`musics/${playlist.id!}`, { recursive: true });
       }
     }
 
