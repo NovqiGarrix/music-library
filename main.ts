@@ -8,8 +8,6 @@ import YTDlpWrap from 'yt-dlp-wrap';
 import { s3 } from "./lib/s3.ts";
 import MusicModel from "./model/MusicModel.ts";
 
-const kv = await Deno.openKv();
-
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
 
@@ -82,12 +80,8 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
 
         // Check if audio already exists
         const music = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
-        const existInKv = (await kv.get<string>(["lastId"])).value === audio.id!;
-        if (music || existInKv) {
+        if (music) {
           console.log(`${audio.snippet?.title} already exists`);
-          if (!existInKv) {
-            await kv.set(["lastId"], audio.id!);
-          }
           continue;
         }
 
@@ -110,7 +104,6 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
           ...audio,
           streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
         });
-        await kv.set(["lastId"], audio.id!);
 
         console.log(`-- ${uploadedPath} Saved to DB:`);
         // deno-lint-ignore no-explicit-any
