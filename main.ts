@@ -12,12 +12,15 @@ const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
 
 const YT_DLP_BINARY_PATH = Deno.env.get("YT_DLP_BINARY_PATH");
+const MAX_AUDIO_PER_LOOP = 5;
 
 if (YT_DLP_BINARY_PATH) {
   ytDlpWrap.setBinaryPath(YT_DLP_BINARY_PATH);
 }
 
 function downloadAudio(playlistId: string, videoId: string, videoTitle: string) {
+  console.log('Trying to download the audio...: ', videoTitle);
+
   const videoURL = `https://www.youtube.com/watch?v=${videoId}`;
   return new Promise<string>((resolve, reject) => {
     const output = `musics/${playlistId}/${videoTitle}.opus`;
@@ -69,49 +72,54 @@ async function uploadPlaylistVideos(auth: OAuth2Client, playlistId: string) {
     first = false;
     videoNextPageToken = playlistVideos.nextPageToken ?? undefined;
 
-    // Loop each video
-    for await (const audio of playlistVideos.items!) {
+    for (let index = 0; index < playlistVideos.items?.length!; index += MAX_AUDIO_PER_LOOP) {
+      const slicedAudio = playlistVideos.items!.slice(index, index + MAX_AUDIO_PER_LOOP);
 
-      const channelTitle = audio.snippet?.channelTitle!;
-      const filename = `${audio.snippet?.title?.replaceAll("/", "_")}.opus`;
-      const uploadedPath = `${channelTitle}/${filename}`;
+      // Loop each video
+      await Promise.all(slicedAudio.map(async (audio) => {
+        const channelTitle = audio.snippet?.channelTitle!;
+        const filename = `${audio.snippet?.title?.replaceAll("/", "_").replaceAll(" ", "")}.opus`;
+        const uploadedPath = `${channelTitle}/${filename}`;
 
-      try {
+        try {
 
-        // Check if audio already exists
-        const music = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
-        if (music) {
-          console.log(`${audio.snippet?.title} already exists`);
-          continue;
+          // Check if audio already exists
+          const music = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
+          if (music) {
+            console.log(`${audio.snippet?.title} already exists`);
+            return;
+          }
+
+          const downloadedPath = await downloadAudio(playlistId, audio.snippet?.resourceId?.videoId!, audio.snippet?.title!);
+          const audioFile = await Deno.readFile(downloadedPath);
+
+          console.log(`Uploading ${uploadedPath} --`);
+
+          await s3.write(uploadedPath, audioFile);
+
+          console.log(`-- ${uploadedPath} uploaded`);
+
+          await Deno.remove(downloadedPath);
+
+          console.log(`-- ${uploadedPath} deleted`);
+
+          console.log(`${uploadedPath} Saving to DB: --`);
+
+          await MusicModel.create({
+            ...audio,
+            streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
+          });
+
+          console.log(`-- ${uploadedPath} Saved to DB:`);
+          // deno-lint-ignore no-explicit-any
+        } catch (error: any) {
+          console.log(`-- ${uploadedPath}: ${error}`);
+          // console.log(`Keys: ${Object.keys(error)}`);
         }
+      }));
 
-        const downloadedPath = await downloadAudio(playlistId, audio.snippet?.resourceId?.videoId!, audio.snippet?.title!);
-        const audioFile = await Deno.readFile(downloadedPath);
-
-        console.log(`Uploading ${uploadedPath} --`);
-
-        await s3.write(uploadedPath, audioFile);
-
-        console.log(`-- ${uploadedPath} uploaded`);
-
-        await Deno.remove(downloadedPath);
-
-        console.log(`-- ${uploadedPath} deleted`);
-
-        console.log(`${uploadedPath} Saving to DB: --`);
-
-        await MusicModel.create({
-          ...audio,
-          streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
-        });
-
-        console.log(`-- ${uploadedPath} Saved to DB:`);
-        // deno-lint-ignore no-explicit-any
-      } catch (error: any) {
-        console.log(`-- ${uploadedPath}: ${error}`);
-        // console.log(`Keys: ${Object.keys(error)}`);
-      }
     }
+
   }
 
 }
@@ -145,6 +153,8 @@ async function getPlaylists(auth: OAuth2Client): Promise<void> {
         await Deno.remove(`musics/${playlist.id!}`, { recursive: true });
       }
     }
+
+    Deno.exit(0);
 
   } catch (err) {
     console.error("The API returned an error:", err);
