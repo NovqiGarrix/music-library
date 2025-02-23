@@ -1,0 +1,17 @@
+{
+  "tasks": {
+    "dev": "deno run --watch main.ts",
+    "start": "deno run -A main.ts"
+  },
+  "imports": {
+    "@hk/s3": "jsr:@hk/s3@^0.1.0",
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.3",
+    "@std/fs": "jsr:@std/fs@^1.0.13",
+    "google-auth-library": "npm:google-auth-library@^9.15.1",
+    "googleapis": "npm:googleapis@^144.0.0",
+    "mongoose": "npm:mongoose@^8.10.1",
+    "yt-dlp-wrap": "npm:yt-dlp-wrap@^2.3.12"
+  },
+  "nodeModulesDir": "auto"
+}
