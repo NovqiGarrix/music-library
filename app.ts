@@ -3,11 +3,15 @@ import "@std/dotenv/load";
 import { Hono } from '@hono/hono';
 import { cors } from '@hono/hono/cors';
 import { logger as honoLogger } from '@hono/hono/logger';
+import { swaggerUI } from '@hono/swagger-ui';
 import { OAuth2Client } from "google-auth-library";
 import env from "./config/env.ts";
 import { honoLogPrintFunc, logger } from "./lib/logger.ts";
 import musicRoutes from "./routes/music.routes.ts";
 import { Bindings } from "./types.ts";
+
+// Import the OpenAPI schema
+import apiSchema from './api.json' with { type: "json" };
 
 export function createApp() {
 
@@ -18,6 +22,13 @@ export function createApp() {
     const app = new Hono<{ Bindings: Bindings }>();
     app.use(honoLogger(honoLogPrintFunc));
     app.use(cors());
+
+    // Mount the Swagger UI
+    // @ts-expect-error - Mismatch type
+    app.use('/docs/*', swaggerUI({
+        spec: apiSchema,
+        url: '/docs',
+    }));
 
     app.get('/', (c) => {
         return c.json({ message: 'Hello World' }, 200);
@@ -38,6 +49,7 @@ export function createApp() {
         port: 4000,
         onListen({ port }) {
             logger.info(`Listening on http://localhost:${port}`);
+            logger.info(`API Documentation available at http://localhost:${port}/docs`);
         }
     }, app.fetch);
 
