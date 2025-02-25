@@ -23,7 +23,7 @@ const SnippetSchema = new Schema({
     publishedAt: { type: Date, required: true },
     channelId: { type: String, required: true },
     title: { type: String, required: true },
-    description: { type: String, required: true },
+    description: { type: String },
     thumbnails: { type: ThumbnailsSchema, required: true },
     channelTitle: { type: String, required: true },
     playlistId: { type: String },
@@ -32,9 +32,16 @@ const SnippetSchema = new Schema({
     videoOwnerChannelId: { type: String, required: true }
 });
 
+const ContentDetailsSchema = new Schema({
+    endAt: { type: String, required: true },
+    videoId: { type: String, required: true },
+    videoPublishedAt: { type: Date, required: true }
+});
+
 const MusicSchema = new Schema({
     id: { type: String, required: true },
     snippet: { type: SnippetSchema, required: true },
+    contentDetails: { type: ContentDetailsSchema, required: true },
     streamUri: { type: String, required: true }
 });
 
