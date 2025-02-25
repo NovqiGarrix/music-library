@@ -241,16 +241,10 @@ export async function getMusics(params: GetMusicsParams) {
 
     // Add text search if searchKeyword is provided
     if (searchKeyword.trim()) {
-        // Create text index on first use if it doesn't exist
         try {
-            await MusicModel.collection.createIndex({
-                "snippet.title": "text",
-                "snippet.channelTitle": "text"
-            });
-
             query = {
                 $text: { $search: searchKeyword },
-            };
+            }
         } catch (error) {
             logger.error("Error creating text index:", error);
             // Continue with empty query if index creation fails
