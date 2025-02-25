@@ -2,7 +2,13 @@ import { Hono } from "@hono/hono";
 import { googleAuth } from "../lib/google-auth.ts";
 import { logger } from "../lib/logger.ts";
 import { ApiError } from "../model/error.ts";
-import { downloadAndStoreSingleVideo, downloadAndStoreVideosByChannelHandle, downloadAndStoreVideosByPlaylistId, getMusics } from "../services/music.service.ts";
+import {
+    downloadAndStoreSingleVideo,
+    downloadAndStoreVideosByChannelHandle,
+    downloadAndStoreVideosByPlaylistId,
+    getMusics,
+    getTrackById
+} from "../services/music.service.ts";
 import { Bindings } from "../types.ts";
 
 const musicRoutes = new Hono<{ Bindings: Bindings }>();
@@ -68,6 +74,28 @@ musicRoutes.post("/tracks_by_playlist", async (c) => {
             logger.error(`/tracks_by_playlist`, e);
         }
         return ApiError.internalServerError().toResponse(c);
+    }
+});
+
+// New route to get a single track by ID
+musicRoutes.get("/tracks/:id", async (c) => {
+    try {
+        const id = c.req.param('id');
+        const { fields } = c.req.query();
+
+        const track = await getTrackById(id, fields);
+
+        return c.json({
+            status: "OK",
+            data: track
+        });
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return error.toResponse(c);
+        }
+
+        logger.error(`Error fetching track:`, error);
+        return new ApiError(500).setError("Failed to fetch track").toResponse(c);
     }
 });
 

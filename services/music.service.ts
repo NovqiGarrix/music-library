@@ -198,7 +198,8 @@ function parseFieldsToProjection(fields?: string): Record<string, number> {
         "snippet.title": 1,
         "snippet.channelTitle": 1,
         "snippet.thumbnails.standard": 1,
-        "contentDetails.endAt": 1
+        "contentDetails": 1,
+        "streamUri": 1,
     };
 
     // If no fields specified, return default projection
@@ -273,4 +274,22 @@ export async function getMusics(params: GetMusicsParams) {
             totalPages: Math.ceil(total / limit),
         },
     }
+}
+
+/**
+ * Gets a single track by its ID
+ * @param id The unique identifier of the track
+ * @param fields Optional dot notation fields to include in the response
+ * @returns The track data or throws a 404 error if not found
+ */
+export async function getTrackById(id: string, fields?: string) {
+    const projection = parseFieldsToProjection(fields);
+
+    const track = await MusicModel.findOne({ id }, projection).lean();
+
+    if (!track) {
+        throw new ApiError(404).setError(`Track with id ${id} not found`);
+    }
+
+    return track;
 }
