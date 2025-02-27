@@ -1,5 +1,4 @@
 import { Hono } from "@hono/hono";
-import { googleAuth } from "../lib/google-auth.ts";
 import { logger } from "../lib/logger.ts";
 import { ApiError } from "../model/error.ts";
 import {
@@ -7,14 +6,16 @@ import {
     downloadAndStoreVideosByChannelHandle,
     downloadAndStoreVideosByPlaylistId,
     getMusics,
-    getTrackById
+    getTrackById,
+    mockSearchResults,
+    searchYouTubeVideos,
 } from "../services/music.service.ts";
 import { Bindings } from "../types.ts";
 
 const musicRoutes = new Hono<{ Bindings: Bindings }>();
 
 // Updated route with noun-based endpoint for creating a new track
-musicRoutes.post("/tracks_by_video", async (c) => {
+musicRoutes.post("/track_by_video", async (c) => {
     const { url } = await c.req.json();
     let videoId = "";
 
@@ -38,10 +39,13 @@ musicRoutes.post("/tracks_by_video", async (c) => {
     }
 
     try {
-        await downloadAndStoreSingleVideo(googleAuth, videoId);
-        return c.json({ message: "Track created successfully" });
+        const music = await downloadAndStoreSingleVideo(c.env.auth, videoId);
+        return c.json({ data: music });
     } catch (e) {
-        logger.error(`Error creating track`, e);
+        if (!(e instanceof ApiError)) {
+            logger.error(`/tracks_by_video`);
+            console.error(e);
+        }
         return ApiError.internalServerError().toResponse(c);
     }
 });
@@ -50,7 +54,7 @@ musicRoutes.post("/tracks_by_channel_handle", async (c) => {
     const { channelHandle } = await c.req.json();
 
     try {
-        await downloadAndStoreVideosByChannelHandle(googleAuth, channelHandle);
+        await downloadAndStoreVideosByChannelHandle(c.env.auth, channelHandle);
         return c.json({ message: "Tracks created successfully" });
     } catch (e) {
         if (!(e instanceof ApiError)) {
@@ -67,7 +71,7 @@ musicRoutes.post("/tracks_by_playlist", async (c) => {
         return c.json({ error: "playlistId is required" }, 400);
     }
     try {
-        await downloadAndStoreVideosByPlaylistId(googleAuth, playlistId);
+        await downloadAndStoreVideosByPlaylistId(c.env.auth, playlistId);
         return c.json({ message: "Tracks created successfully" });
     } catch (e) {
         if (!(e instanceof ApiError)) {
@@ -83,7 +87,7 @@ musicRoutes.get("/tracks/:id", async (c) => {
         const id = c.req.param('id');
         const { fields } = c.req.query();
 
-        const track = await getTrackById(id, fields);
+        const track = await getTrackById(id, c.env.auth, fields);
 
         return c.json({
             status: "OK",
@@ -136,5 +140,55 @@ musicRoutes.get("/", async (c) => {
         return new ApiError(500).setError("Failed to fetch musics").toResponse(c);
     }
 });
+
+// Route to search YouTube videos
+musicRoutes.get("/search", async (c) => {
+    try {
+        const { q, pageToken, maxResults } = c.req.query();
+
+        if (!q) {
+            return new ApiError(400).setError("Search query is required").toResponse(c);
+        }
+
+        const results = await searchYouTubeVideos({
+            auth: c.env.auth,
+            query: q,
+            pageToken,
+            maxResults: maxResults ? Number(maxResults) : undefined
+        });
+
+        return c.json({
+            status: "OK",
+            data: results
+        });
+    } catch (error) {
+        if (!(error instanceof ApiError)) {
+            logger.error("Error searching videos:");
+            console.error(error);
+        }
+        return new ApiError(500).setError("Failed to search videos").toResponse(c);
+    }
+});
+
+musicRoutes.get("/mock_search", async (c) => {
+
+    try {
+
+        const results = await mockSearchResults(c.env.auth);
+
+        return c.json({
+            status: "OK",
+            data: results
+        });
+
+    } catch (error) {
+        if (!(error instanceof ApiError)) {
+            logger.error("Error searching videos:");
+            console.error(error);
+        }
+        return new ApiError(500).setError("Failed to search videos").toResponse(c);
+    }
+
+})
 
 export default musicRoutes;

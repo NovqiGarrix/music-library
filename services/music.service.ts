@@ -57,7 +57,7 @@ function downloadAudio(channelId: string, audioId: string, audioTitle: string) {
     })
 }
 
-async function downloadAndStore(audio: youtube_v3.Schema$PlaylistItem) {
+async function downloadAndStore(audio: youtube_v3.Schema$Video) {
 
     // Check if audio already exist
     const existedAudio = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
@@ -70,7 +70,7 @@ async function downloadAndStore(audio: youtube_v3.Schema$PlaylistItem) {
     const channelTitle = audio.snippet?.channelTitle!;
     const channelId = audio.snippet?.channelId!;
 
-    const audioId = audio.snippet?.resourceId?.videoId!;
+    const audioId = audio.id!;
 
     // Download the audio
     const downloadedPath = await downloadAudio(channelId, audioId, videoTitle);
@@ -85,15 +85,19 @@ async function downloadAndStore(audio: youtube_v3.Schema$PlaylistItem) {
     await Deno.remove(downloadedPath);
 
     // Save the record to the database
-    await MusicModel.findOneAndUpdate({
-        id: audio.id!,
+    const music = await MusicModel.findOneAndUpdate({
+        id: audioId,
     }, {
+        id: audioId,
         snippet: audio.snippet,
         streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
         contentDetails: audio.contentDetails
     }, {
-        upsert: true
+        upsert: true,
+        new: true,
     });
+
+    return music;
 }
 
 export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, playlistId: string) {
@@ -117,9 +121,16 @@ export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, pla
         for (let index = 0; index < playlistVideos.items?.length!; index += MAX_AUDIO_PER_LOOP) {
             const slicedAudio = playlistVideos.items!.slice(index, index + MAX_AUDIO_PER_LOOP);
 
+            const { data: videos } = await service.videos.list({
+                auth,
+                id: slicedAudio.map((a) => a.snippet?.resourceId?.videoId!).filter(id => id) as string[],
+                part: ["snippet"],
+                fields: "items(id, snippet)"
+            });
+
             try {
                 // Loop each video
-                await Promise.all(slicedAudio.map(downloadAndStore));
+                await Promise.all(videos.items!.map(downloadAndStore));
             } catch (error) {
                 console.error('Error downloading videos:', error);
                 continue;
@@ -153,11 +164,18 @@ export async function downloadAndStoreVideosByChannelHandle(auth: OAuth2Client, 
 }
 
 // New function to download and store a single YouTube video
-export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: string): Promise<void> {
+export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: string) {
+
+    // Check if the music is existed
+    const music = await MusicModel.findOne({ id: videoId }).lean();
+    if (music) {
+        return music;
+    }
+
     // Fetch video details using YouTube API
-    const { data: videoRes } = await service.playlistItems.list({
+    const { data: videoRes } = await service.videos.list({
         auth,
-        videoId,
+        id: [videoId],
         part: ["snippet", "contentDetails"],
     });
 
@@ -167,7 +185,7 @@ export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: s
 
     const video = videoRes.items[0];
 
-    await downloadAndStore(video);
+    return downloadAndStore(video);
 }
 
 /**
@@ -278,18 +296,67 @@ export async function getMusics(params: GetMusicsParams) {
 
 /**
  * Gets a single track by its ID
- * @param id The unique identifier of the track
+ * @param videoId videoId not playlistItem ID
  * @param fields Optional dot notation fields to include in the response
  * @returns The track data or throws a 404 error if not found
  */
-export async function getTrackById(id: string, fields?: string) {
+export async function getTrackById(videoId: string, googleAuth: OAuth2Client, fields?: string) {
     const projection = parseFieldsToProjection(fields);
 
-    const track = await MusicModel.findOne({ id }, projection).lean();
+    const track = await MusicModel.findOne({ id: videoId }, projection).lean();
 
     if (!track) {
-        throw new ApiError(404).setError(`Track with id ${id} not found`);
+        await downloadAndStoreSingleVideo(googleAuth, videoId);
+        return (await MusicModel.findOne({ id: videoId }, projection).lean())!;
     }
 
     return track;
+}
+
+/**
+ * Search YouTube videos using the YouTube API
+ * @param auth OAuth2Client for authentication
+ * @param query Search query string
+ * @param pageToken Optional token for pagination
+ * @param maxResults Optional maximum number of results (default: 25, max: 50)
+ * @returns YouTube search results
+ */
+export interface SearchYouTubeVideosParams {
+    auth: OAuth2Client;
+    query: string;
+    pageToken?: string;
+    maxResults?: number;
+}
+
+export async function searchYouTubeVideos(params: SearchYouTubeVideosParams) {
+    const { auth, query, pageToken, maxResults = 50 } = params;
+
+    const { data } = await service.search.list({
+        auth,
+        q: query,
+        part: ["snippet"],
+        type: ["video"],
+        maxResults,
+        pageToken,
+        fields: "nextPageToken,prevPageToken,items(id,snippet)"
+    });
+
+    return {
+        items: data.items,
+        nextPageToken: data.nextPageToken,
+        prevPageToken: data.prevPageToken
+    }
+}
+
+export async function mockSearchResults(auth: OAuth2Client) {
+
+    const { data } = await service.videos.list({
+        auth,
+        part: ["snippet"],
+        fields: "items(id,snippet)",
+        id: ["dQw4w9WgXcQ", "dQw4w9WgXcQ", "dQw4w9WgXcQ", "dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    });
+
+    return data;
+
 }
