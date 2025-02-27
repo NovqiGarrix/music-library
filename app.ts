@@ -46,7 +46,7 @@ export function createApp() {
     app.route('/api/v1/musics', musicRoutes);
 
     const httpServer = Deno.serve({
-        port: 4000,
+        port: env.PORT,
         onListen({ port }) {
             logger.info(`Listening on http://localhost:${port}`);
             logger.info(`API Documentation available at http://localhost:${port}/docs`);
