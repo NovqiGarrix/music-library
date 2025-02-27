@@ -8,6 +8,7 @@ import { logger } from "../lib/logger.ts";
 import { s3 } from "../lib/s3.ts";
 import MusicModel from "../model/MusicModel.ts";
 import { ApiError } from "../model/error.ts";
+import env from "../config/env.ts";
 
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
@@ -42,6 +43,10 @@ function downloadAudio(channelId: string, audioId: string, audioTitle: string) {
 
         if (customCookies) {
             execOptions.push('--cookies', customCookies);
+        }
+
+        if (env.FFMPEG_LOCATION) {
+            execOptions.push('--ffmpeg-location', env.FFMPEG_LOCATION);
         }
 
         ytDlpWrap.exec(execOptions).on('progress', (progress) => {

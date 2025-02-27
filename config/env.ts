@@ -11,6 +11,8 @@ const envSchema = z.object({
     DATABASE_URL: z.string(),
 
     GOOGLE_API_KEY: z.string(),
+
+    FFMPEG_LOCATION: z.string().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;
