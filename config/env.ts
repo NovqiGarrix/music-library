@@ -12,7 +12,9 @@ const envSchema = z.object({
 
     GOOGLE_API_KEY: z.string(),
 
-    FFMPEG_LOCATION: z.string().optional()
+    FFMPEG_LOCATION: z.string().optional(),
+
+    COOKIES_FILE_PATH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

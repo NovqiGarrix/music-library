@@ -4,11 +4,11 @@ import { ensureDir } from '@std/fs';
 import { OAuth2Client } from "google-auth-library";
 import { google, youtube_v3 } from "googleapis";
 import YTDlpWrap from 'yt-dlp-wrap';
+import env from "../config/env.ts";
 import { logger } from "../lib/logger.ts";
 import { s3 } from "../lib/s3.ts";
 import MusicModel from "../model/MusicModel.ts";
 import { ApiError } from "../model/error.ts";
-import env from "../config/env.ts";
 
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
@@ -27,7 +27,7 @@ function downloadAudio(channelId: string, audioId: string, audioTitle: string) {
     return new Promise<string>((resolve, reject) => {
         const output = `musics/${channelId}/${audioTitle}.opus`;
 
-        const customCookies = Deno.env.get("COOKIES_FILE_PATH");
+        const customCookies = env.COOKIES_FILE_PATH;
 
         const execOptions = [
             videoURL,
