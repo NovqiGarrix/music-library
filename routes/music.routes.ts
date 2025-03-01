@@ -6,6 +6,7 @@ import {
     downloadAndStoreVideosByChannelHandle,
     downloadAndStoreVideosByPlaylistId,
     getMusics,
+    getNextMusics,
     getTrackById,
     mockSearchResults,
     searchYouTubeVideos,
@@ -190,5 +191,50 @@ musicRoutes.get("/mock_search", async (c) => {
     }
 
 })
+
+// Route to get next musics from the same channel
+musicRoutes.get("/next", async (c) => {
+    try {
+        const { page, limit, currentId, channelTitle, fields } = c.req.query();
+
+        // Convert query params to numbers with defaults
+        const pageNumber = page ? Number(page) : 1;
+        const limitNumber = limit ? Number(limit) : 20;
+
+        // Validate required parameters
+        if (!currentId || !channelTitle) {
+            return new ApiError(400).setError("currentId and channelTitle are required").toResponse(c);
+        }
+
+        // Validate pagination parameters
+        if (isNaN(pageNumber) || pageNumber < 1) {
+            return new ApiError(400).setError("Invalid page parameter").toResponse(c);
+        }
+
+        if (isNaN(limitNumber) || limitNumber < 1) {
+            return new ApiError(400).setError("Invalid limit parameter").toResponse(c);
+        }
+
+        const result = await getNextMusics({
+            page: pageNumber,
+            limit: limitNumber,
+            currentId,
+            channelTitle,
+            fields
+        });
+
+        return c.json({
+            status: "OK",
+            data: result.musics,
+            pagination: result.pagination
+        });
+    } catch (error) {
+        if (!(error instanceof ApiError)) {
+            logger.error("Error fetching next musics:");
+            console.error(error);
+        }
+        return new ApiError(500).setError("Failed to fetch next musics").toResponse(c);
+    }
+});
 
 export default musicRoutes;

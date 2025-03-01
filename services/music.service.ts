@@ -168,6 +168,50 @@ export async function downloadAndStoreVideosByChannelHandle(auth: OAuth2Client, 
     await downloadAndStoreVideosByPlaylistId(auth, playlistId);
 }
 
+interface GetNextMusicsParams {
+    page: number;
+    limit: number;
+    currentId: string;
+    channelTitle: string;
+    fields?: string;
+}
+
+/**
+ * 
+ * @param params GetNextMusicsParams
+ * @returns Few next musics from the same channel
+ */
+export async function getNextMusics(params: GetNextMusicsParams) {
+
+    const { page, limit, fields, currentId, channelTitle } = params;
+
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
+    const projection = parseFieldsToProjection(fields);
+
+    const [musics, total] = await Promise.all([
+        MusicModel.find({
+            "snippet.channelTitle": channelTitle,
+            id: { $ne: currentId }
+        }, projection)
+            .limit(limit)
+            .skip(skip)
+            .lean(),
+        MusicModel.countDocuments({ "snippet.channelTitle": channelTitle })
+    ]);
+
+    return {
+        musics,
+        pagination: {
+            totalItems: total,
+            currentPage: page,
+            pageSize: limit,
+            totalPages: Math.ceil(total / limit),
+        },
+    }
+
+}
+
 // New function to download and store a single YouTube video
 export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: string) {
 
@@ -193,6 +237,11 @@ export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: s
     return downloadAndStore(video);
 }
 
+interface PaginationOptions {
+    page: number;
+    limit: number;
+}
+
 /**
  * Gets a paginated list of musics with optional text search
  * @param page The page number (starts from 1)
@@ -201,12 +250,10 @@ export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: s
  * @returns Music items and pagination metadata
  */
 // Interface for the getMusics function parameters
-export interface GetMusicsParams {
-    page: number;
-    limit: number;
+export type GetMusicsParams = {
     searchKeyword?: string;
     fields?: string; // Add fields parameter for selecting specific fields
-}
+} & PaginationOptions;
 
 /**
  * Converts dot notation field paths to MongoDB projection object
@@ -302,6 +349,7 @@ export async function getMusics(params: GetMusicsParams) {
 /**
  * Gets a single track by its ID
  * @param videoId videoId not playlistItem ID
+ * @param googleAuth Google OAuth2Client for authentication
  * @param fields Optional dot notation fields to include in the response
  * @returns The track data or throws a 404 error if not found
  */
