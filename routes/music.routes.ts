@@ -8,6 +8,8 @@ import {
     getMusics,
     getNextMusics,
     getTrackById,
+    getNextTrack,
+    getPreviousTrack,
     mockSearchResults,
     searchYouTubeVideos,
 } from "../services/music.service.ts";
@@ -101,6 +103,58 @@ musicRoutes.get("/tracks/:id", async (c) => {
 
         logger.error(`Error fetching track:`, error);
         return new ApiError(500).setError("Failed to fetch track").toResponse(c);
+    }
+});
+
+// Route to get the next track after the current one
+musicRoutes.get("/tracks/:id/next", async (c) => {
+    try {
+        const id = c.req.param('id');
+        const { channelTitle, fields } = c.req.query();
+
+        const nextTrack = await getNextTrack(id, channelTitle, fields);
+
+        if (!nextTrack) {
+            return new ApiError(404).setError("No next track found").toResponse(c);
+        }
+
+        return c.json({
+            status: "OK",
+            data: nextTrack
+        });
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return error.toResponse(c);
+        }
+
+        logger.error(`Error fetching next track:`, error);
+        return new ApiError(500).setError("Failed to fetch next track").toResponse(c);
+    }
+});
+
+// Route to get the previous track before the current one
+musicRoutes.get("/tracks/:id/previous", async (c) => {
+    try {
+        const id = c.req.param('id');
+        const { channelTitle, fields } = c.req.query();
+
+        const previousTrack = await getPreviousTrack(id, channelTitle, fields);
+
+        if (!previousTrack) {
+            return new ApiError(404).setError("No previous track found").toResponse(c);
+        }
+
+        return c.json({
+            status: "OK",
+            data: previousTrack
+        });
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return error.toResponse(c);
+        }
+
+        logger.error(`Error fetching previous track:`, error);
+        return new ApiError(500).setError("Failed to fetch previous track").toResponse(c);
     }
 });
 

@@ -10,6 +10,8 @@ const envSchema = z.object({
 
     DATABASE_URL: z.string(),
 
+    TEST_DATABASE_URL: z.string().optional(),
+
     GOOGLE_API_KEY: z.string(),
 
     FFMPEG_LOCATION: z.string().optional(),

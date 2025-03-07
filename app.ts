@@ -6,7 +6,7 @@ import { logger as honoLogger } from '@hono/hono/logger';
 import { swaggerUI } from '@hono/swagger-ui';
 import { OAuth2Client } from "google-auth-library";
 import env from "./config/env.ts";
-import { honoLogPrintFunc, logger } from "./lib/logger.ts";
+import { honoLogPrintFunc } from "./lib/logger.ts";
 import musicRoutes from "./routes/music.routes.ts";
 import { Bindings } from "./types.ts";
 
@@ -45,14 +45,6 @@ export function createApp() {
 
     app.route('/api/v1/musics', musicRoutes);
 
-    const httpServer = Deno.serve({
-        port: env.PORT,
-        onListen({ port }) {
-            logger.info(`Listening on http://localhost:${port}`);
-            logger.info(`API Documentation available at http://localhost:${port}/docs`);
-        }
-    }, app.fetch);
-
-    return httpServer;
+    return app;
 
 }

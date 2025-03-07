@@ -413,3 +413,91 @@ export async function mockSearchResults(auth: OAuth2Client) {
     return data;
 
 }
+
+/**
+ * Gets the next track by the current track ID
+ * @param currentTrackId The ID of the current track
+ * @param channelTitle Optional channel title to limit results to the same channel
+ * @param fields Optional dot notation fields to include in the response
+ * @returns The next track or null if there isn't one
+ */
+export async function getNextTrack(currentTrackId: string, channelTitle?: string, fields?: string) {
+    const projection = parseFieldsToProjection(fields);
+
+    const query: Record<string, unknown> = { id: { $ne: currentTrackId } };
+
+    // If channelTitle is provided, limit to the same channel
+    if (channelTitle) {
+        query["snippet.channelTitle"] = channelTitle;
+    }
+
+    // Find the current track to get its creation timestamp
+    const currentTrack = await MusicModel.findOne({ id: currentTrackId }).lean();
+    if (!currentTrack) {
+        throw new ApiError(404).setError(`Track with ID ${currentTrackId} not found`);
+    }
+
+    // Find the next track (created after the current track)
+    let nextTrack = await MusicModel.findOne(
+        {
+            ...query,
+            _id: { $gt: currentTrack._id }
+        },
+        projection
+    )
+        .sort({ _id: 1 })
+        .lean();
+
+    // If no next track in the same direction, wrap around to the first track
+    if (!nextTrack) {
+        nextTrack = await MusicModel.findOne(query, projection)
+            .sort({ _id: 1 })
+            .lean();
+    }
+
+    return nextTrack;
+}
+
+/**
+ * Gets the previous track by the current track ID
+ * @param currentTrackId The ID of the current track
+ * @param channelTitle Optional channel title to limit results to the same channel
+ * @param fields Optional dot notation fields to include in the response
+ * @returns The previous track or null if there isn't one
+ */
+export async function getPreviousTrack(currentTrackId: string, channelTitle?: string, fields?: string) {
+    const projection = parseFieldsToProjection(fields);
+
+    const query: Record<string, unknown> = { id: { $ne: currentTrackId } };
+
+    // If channelTitle is provided, limit to the same channel
+    if (channelTitle) {
+        query["snippet.channelTitle"] = channelTitle;
+    }
+
+    // Find the current track to get its creation timestamp
+    const currentTrack = await MusicModel.findOne({ id: currentTrackId }).lean();
+    if (!currentTrack) {
+        throw new ApiError(404).setError(`Track with ID ${currentTrackId} not found`);
+    }
+
+    // Find the previous track (created before the current track)
+    let previousTrack = await MusicModel.findOne(
+        {
+            ...query,
+            _id: { $lt: currentTrack._id }
+        },
+        projection
+    )
+        .sort({ _id: -1 })
+        .lean();
+
+    // If no previous track, wrap around to the last track
+    if (!previousTrack) {
+        previousTrack = await MusicModel.findOne(query, projection)
+            .sort({ _id: -1 })
+            .lean();
+    }
+
+    return previousTrack;
+}
