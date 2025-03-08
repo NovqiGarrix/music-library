@@ -335,13 +335,16 @@ export async function getMusics(params: GetMusicsParams) {
         MusicModel.countDocuments(query)
     ]);
 
+    const totalPages = Math.ceil(total / limit);
+
     return {
         musics,
         pagination: {
             totalItems: total,
             currentPage: page,
             pageSize: limit,
-            totalPages: Math.ceil(total / limit),
+            totalPages,
+            nextPage: page < totalPages ? page + 1 : null,
         },
     }
 }

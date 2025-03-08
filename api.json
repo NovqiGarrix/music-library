@@ -66,42 +66,44 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {
-                                                        "type": "string"
-                                                    },
-                                                    "title": {
-                                                        "type": "string"
-                                                    },
-                                                    "artist": {
-                                                        "type": "string"
-                                                    },
-                                                    "videoId": {
-                                                        "type": "string"
-                                                    },
-                                                    "thumbnail": {
-                                                        "type": "string"
-                                                    }
-                                                }
+                                                "$ref": "#/components/schemas/Track"
                                             }
                                         },
                                         "pagination": {
                                             "type": "object",
                                             "properties": {
-                                                "page": {
-                                                    "type": "integer"
+                                                "currentPage": {
+                                                    "type": "integer",
+                                                    "example": 1
                                                 },
-                                                "limit": {
-                                                    "type": "integer"
+                                                "pageSize": {
+                                                    "type": "integer",
+                                                    "example": 10
                                                 },
                                                 "totalItems": {
-                                                    "type": "integer"
+                                                    "type": "integer",
+                                                    "example": 209
                                                 },
                                                 "totalPages": {
-                                                    "type": "integer"
+                                                    "type": "integer",
+                                                    "example": 21
+                                                },
+                                                "nextPage": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "example": 2,
+                                                    "description": "The next page number, or null if this is the last page"
                                                 }
-                                            }
+                                            },
+                                            "required": [
+                                                "currentPage",
+                                                "pageSize",
+                                                "totalItems",
+                                                "totalPages",
+                                                "nextPage"
+                                            ]
                                         }
                                     }
                                 }
@@ -683,6 +685,54 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Track": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "snippet": {
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string"
+                            },
+                            "channelTitle": {
+                                "type": "string"
+                            },
+                            "thumbnails": {
+                                "type": "object",
+                                "properties": {
+                                    "standard": {
+                                        "type": "object",
+                                        "properties": {
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "width": {
+                                                "type": "integer"
+                                            },
+                                            "height": {
+                                                "type": "integer"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "streamUri": {
+                        "type": "string"
+                    },
+                    "contentDetails": {
+                        "type": "object"
                     }
                 }
             }
