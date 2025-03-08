@@ -58,3 +58,24 @@ Deno.test("remove any duplicates", async (t) => {
     }
 
 });
+
+Deno.test("Add createdAt and updatedAt", async () => {
+    await mongoose.connect(env.DATABASE_URL);
+
+    const musics = await MusicModel.find({});
+
+    for await (const music of musics) {
+        if (!music.createdAt) {
+            music.createdAt = new Date();
+        }
+        if (!music.updatedAt) {
+            music.updatedAt = new Date();
+        }
+        await music.save();
+    }
+
+    for await (const connection of mongoose.connections) {
+        await connection.close(true);
+    }
+
+});

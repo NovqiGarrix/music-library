@@ -329,6 +329,7 @@ export async function getMusics(params: GetMusicsParams) {
     const [musics, total] = await Promise.all([
         MusicModel
             .find(query, projection)
+            .sort({ createdAt: -1, id: -1 })
             .skip(skip)
             .limit(limit)
             .lean(),

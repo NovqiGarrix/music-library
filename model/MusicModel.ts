@@ -28,8 +28,9 @@ const SnippetSchema = new Schema({
 const MusicSchema = new Schema({
     id: { type: String, required: true },
     snippet: { type: SnippetSchema, required: true },
-    streamUri: { type: String, required: true }
-});
+    streamUri: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+}, { timestamps: true });
 
 const MusicModel = model('musics', MusicSchema);
 
