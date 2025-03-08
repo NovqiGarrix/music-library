@@ -84,7 +84,7 @@ Deno.test("Add createdAt and updatedAt", async () => {
 
 Deno.test("downloadAndStoreVideosByPlaylistId should not create duplicates", async (t) => {
     // Connect to the database
-    await mongoose.connect(env.DATABASE_URL!);
+    await mongoose.connect(env.TEST_DATABASE_URL!);
 
     await MusicModel.deleteMany();
 
