@@ -688,6 +688,127 @@
                     }
                 }
             }
+        },
+        "/api/v1/musics/channels": {
+            "get": {
+                "tags": [
+                    "Music"
+                ],
+                "summary": "Get all channels",
+                "description": "Retrieve a paginated list of all unique channels with their ID and title",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number for pagination (default: 1)",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of items per page (default: 20)",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 20
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of channels",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "OK"
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Channel"
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "currentPage": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "pageSize": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "totalItems": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "totalPages": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "nextPage": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "example": 2,
+                                                    "description": "The next page number, or null if this is the last page"
+                                                }
+                                            },
+                                            "required": [
+                                                "currentPage",
+                                                "pageSize",
+                                                "totalItems",
+                                                "totalPages",
+                                                "nextPage"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -735,6 +856,27 @@
                         "type": "object"
                     }
                 }
+            },
+            "Channel": {
+                "type": "object",
+                "properties": {
+                    "channelId": {
+                        "type": "string",
+                        "description": "Unique ID of the YouTube channel"
+                    },
+                    "channelTitle": {
+                        "type": "string",
+                        "description": "Name of the YouTube channel"
+                    },
+                    "trackCount": {
+                        "type": "integer",
+                        "description": "Number of tracks in the channel"
+                    }
+                },
+                "required": [
+                    "channelId",
+                    "channelTitle"
+                ]
             }
         }
     }

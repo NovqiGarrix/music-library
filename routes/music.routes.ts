@@ -5,6 +5,7 @@ import {
     downloadAndStoreSingleVideo,
     downloadAndStoreVideosByChannelHandle,
     downloadAndStoreVideosByPlaylistId,
+    getChannels,
     getMusics,
     getNextMusics,
     getTrackById,
@@ -288,6 +289,38 @@ musicRoutes.get("/next", async (c) => {
             console.error(error);
         }
         return new ApiError(500).setError("Failed to fetch next musics").toResponse(c);
+    }
+});
+
+// New route to get all channels with pagination
+musicRoutes.get("/channels", async (c) => {
+    try {
+        const { page, limit } = c.req.query();
+
+        // Convert query params to numbers with defaults
+        const pageNumber = page ? Number(page) : 1;
+        const limitNumber = limit ? Number(limit) : 20;
+
+        // Validate pagination parameters
+        if (isNaN(pageNumber) || pageNumber < 1) {
+            return new ApiError(400).setError("Invalid page parameter").toResponse(c);
+        }
+        if (isNaN(limitNumber) || limitNumber < 1) {
+            return new ApiError(400).setError("Invalid limit parameter").toResponse(c);
+        }
+
+        const result = await getChannels(pageNumber, limitNumber);
+
+        return c.json({
+            status: "OK",
+            data: result.channels,
+            pagination: result.pagination
+        });
+    } catch (error) {
+        if (!(error instanceof ApiError)) {
+            logger.error("Error fetching channels:", error);
+        }
+        return new ApiError(500).setError("Failed to fetch channels").toResponse(c);
     }
 });
 

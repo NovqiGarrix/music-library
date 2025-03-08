@@ -535,3 +535,68 @@ export async function getPreviousTrack(currentTrackId: string, channelTitle?: st
 
     return previousTrack;
 }
+
+/**
+ * Gets all unique channels with pagination
+ * @param page The page number (starts from 1)
+ * @param limit The number of items per page
+ * @returns Unique channels (channelId and channelTitle) and pagination metadata
+ */
+export async function getChannels(page: number, limit: number) {
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
+
+    // Use aggregation to get unique channels
+    const channels = await MusicModel.aggregate([
+        // Group by channelId and get the first channelTitle for each
+        {
+            $group: {
+                _id: "$snippet.channelId",
+                channelId: { $first: "$snippet.channelId" },
+                channelTitle: { $first: "$snippet.channelTitle" },
+                count: { $sum: 1 } // Count tracks per channel
+            }
+        },
+        // Sort by channel title alphabetically
+        { $sort: { channelTitle: 1 } },
+        // Skip for pagination
+        { $skip: skip },
+        // Limit results
+        { $limit: limit },
+        // Project only the fields we want
+        {
+            $project: {
+                _id: 0,
+                channelId: 1,
+                channelTitle: 1,
+                trackCount: "$count"
+            }
+        }
+    ]);
+
+    // Count total unique channels for pagination
+    const totalChannelsResult = await MusicModel.aggregate([
+        {
+            $group: {
+                _id: "$snippet.channelId"
+            }
+        },
+        {
+            $count: "total"
+        }
+    ]);
+
+    const total = totalChannelsResult.length > 0 ? totalChannelsResult[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+        channels,
+        pagination: {
+            totalItems: total,
+            currentPage: page,
+            pageSize: limit,
+            totalPages,
+            nextPage: page < totalPages ? page + 1 : null,
+        }
+    };
+}
