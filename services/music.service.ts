@@ -9,6 +9,7 @@ import { logger } from "../lib/logger.ts";
 import { s3 } from "../lib/s3.ts";
 import MusicModel from "../model/MusicModel.ts";
 import { ApiError } from "../model/error.ts";
+import { Document } from "mongoose";
 
 const service = google.youtube("v3");
 const ytDlpWrap = new YTDlpWrap.default();
@@ -67,7 +68,7 @@ async function downloadAndStore(audio: youtube_v3.Schema$Video) {
     // Check if audio already exist in database
     const existedAudio = await MusicModel.findOne({ id: audio.id! }, { id: 1, streamUri: 1 });
     if (existedAudio) {
-        logger.info(`Audio: ${audio.snippet?.title} already existed!`);
+        logger.info(`Audio: ${audio.snippet?.title} - ${audio.id} already existed!`);
         return existedAudio;
     }
 
@@ -124,10 +125,10 @@ async function downloadAndStore(audio: youtube_v3.Schema$Video) {
 }
 
 export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, playlistId: string) {
-
     await ensureDir(`musics/${playlistId}`);
 
     let videoNextPageToken: string | undefined = undefined;
+    let allProcessedVideos: Array<Document> = [];
 
     do {
         const { data: playlistVideos }: { data: youtube_v3.Schema$PlaylistItemListResponse } = await service.playlistItems.list({
@@ -157,18 +158,21 @@ export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, pla
                 id: videoIds,
                 part: ["snippet", "contentDetails"],
                 fields: "items(id, snippet, contentDetails)",
-                videoCategoryId: "10"
+                maxResults: 50,
             });
 
             try {
-                // Loop each video
-                return Promise.all(videos.items?.map(downloadAndStore) || []);
+                // Process each video and collect results without returning early
+                const processedBatch = await Promise.all(videos.items?.map(downloadAndStore) || []);
+                allProcessedVideos = allProcessedVideos.concat(processedBatch.filter(Boolean));
             } catch (error) {
                 console.error('Error downloading videos:', error);
-                continue;
+                // Continue to next batch instead of returning
             }
         }
     } while (videoNextPageToken);
+
+    return allProcessedVideos;
 }
 
 export async function downloadAndStoreVideosByChannelHandle(auth: OAuth2Client, channelHandle: string) {
