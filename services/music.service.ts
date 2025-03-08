@@ -159,6 +159,7 @@ export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, pla
                 part: ["snippet", "contentDetails"],
                 fields: "items(id, snippet, contentDetails)",
                 maxResults: 50,
+                videoCategoryId: "10"
             });
 
             try {
