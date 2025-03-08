@@ -36,7 +36,7 @@ function downloadAudio(channelId: string, audioId: string, audioTitle: string) {
             '--audio-format', 'opus',
             '--audio-quality', '0',
             '--embed-metadata',
-            '--embed-thumbnail',
+            // '--embed-thumbnail',
             '--force-overwrite',
             '-o', output
         ];
@@ -64,11 +64,11 @@ function downloadAudio(channelId: string, audioId: string, audioTitle: string) {
 
 async function downloadAndStore(audio: youtube_v3.Schema$Video) {
 
-    // Check if audio already exist
-    const existedAudio = await MusicModel.findOne({ id: audio.id! }, { id: 1 });
+    // Check if audio already exist in database
+    const existedAudio = await MusicModel.findOne({ id: audio.id! }, { id: 1, streamUri: 1 });
     if (existedAudio) {
         logger.info(`Audio: ${audio.snippet?.title} already existed!`);
-        return;
+        return existedAudio;
     }
 
     const videoTitle = audio.snippet?.title!;
@@ -77,13 +77,31 @@ async function downloadAndStore(audio: youtube_v3.Schema$Video) {
 
     const audioId = audio.id!;
 
-    // Download the audio
-    const downloadedPath = await downloadAudio(channelId, audioId, videoTitle);
-    const audioFile = await Deno.readFile(downloadedPath);
-
-    // Setup upload path
+    // Setup upload path format (same as what we'll use when uploading)
     const filename = `${videoTitle.replaceAll("/", "_").replaceAll(" ", "")}.opus`;
     const uploadedPath = `${channelTitle}/${filename}`;
+    const expectedStreamUri = `https://music-library-r2.nvhub.my.id/${uploadedPath}`;
+
+    // Check if this exact file already exists in the database (by streamUri)
+    const existingByUri = await MusicModel.findOne({ streamUri: expectedStreamUri });
+    if (existingByUri) {
+        logger.info(`Audio file for ${videoTitle} already exists in storage at ${expectedStreamUri}`);
+
+        // If we found the file in storage but with a different ID, update our database
+        if (existingByUri.id !== audioId) {
+            logger.info(`Updating database record for ${videoTitle} with correct ID`);
+            await MusicModel.updateOne(
+                { streamUri: expectedStreamUri },
+                { id: audioId, snippet: audio.snippet, contentDetails: audio.contentDetails }
+            );
+        }
+
+        return (await MusicModel.findOne({ streamUri: expectedStreamUri }))!;
+    }
+
+    // Download the audio since it doesn't exist in storage
+    const downloadedPath = await downloadAudio(channelId, audioId, videoTitle);
+    const audioFile = await Deno.readFile(downloadedPath);
 
     // Upload to S3 and cleanup
     await s3.write(uploadedPath, audioFile);
@@ -95,7 +113,7 @@ async function downloadAndStore(audio: youtube_v3.Schema$Video) {
     }, {
         id: audioId,
         snippet: audio.snippet,
-        streamUri: `https://music-library-r2.nvhub.my.id/${uploadedPath}`,
+        streamUri: expectedStreamUri,
         contentDetails: audio.contentDetails
     }, {
         upsert: true,
@@ -124,26 +142,33 @@ export async function downloadAndStoreVideosByPlaylistId(auth: OAuth2Client, pla
         videoNextPageToken = playlistVideos.nextPageToken ?? undefined;
 
         for (let index = 0; index < playlistVideos.items?.length!; index += MAX_AUDIO_PER_LOOP) {
-            const slicedAudio = playlistVideos.items!.slice(index, index + MAX_AUDIO_PER_LOOP);
+            const slicedPlaylistItems = playlistVideos.items!.slice(index, index + MAX_AUDIO_PER_LOOP);
 
+            // Extract video IDs from playlist items
+            const videoIds = slicedPlaylistItems
+                .map(item => item.snippet?.resourceId?.videoId)
+                .filter(id => id) as string[];
+
+            if (videoIds.length === 0) continue;
+
+            // Fetch the complete video details
             const { data: videos } = await service.videos.list({
                 auth,
-                id: slicedAudio.map((a) => a.snippet?.resourceId?.videoId!).filter(id => id) as string[],
-                part: ["snippet"],
-                fields: "items(id, snippet)"
+                id: videoIds,
+                part: ["snippet", "contentDetails"],
+                fields: "items(id, snippet, contentDetails)",
+                videoCategoryId: "10"
             });
 
             try {
                 // Loop each video
-                await Promise.all(videos.items!.map(downloadAndStore));
+                return Promise.all(videos.items?.map(downloadAndStore) || []);
             } catch (error) {
                 console.error('Error downloading videos:', error);
                 continue;
             }
-
         }
     } while (videoNextPageToken);
-
 }
 
 export async function downloadAndStoreVideosByChannelHandle(auth: OAuth2Client, channelHandle: string) {
