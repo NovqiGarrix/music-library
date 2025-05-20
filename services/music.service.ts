@@ -202,44 +202,124 @@ interface GetNextMusicsParams {
     page: number;
     limit: number;
     currentId: string;
-    channelTitle: string;
     fields?: string;
 }
 
 /**
  * 
  * @param params GetNextMusicsParams
- * @returns Few next musics from the same channel
+ * @returns Next musics
  */
 export async function getNextMusics(params: GetNextMusicsParams) {
+    const { page, fields, currentId } = params;
 
-    const { page, limit, fields, currentId, channelTitle } = params;
+    // Minus 1, because we want to include the current music in the results
+    const limit = params.limit - 1;
 
-    // Calculate skip value for pagination
-    const skip = (page - 1) * limit;
     const projection = parseFieldsToProjection(fields);
 
-    const [musics, total] = await Promise.all([
-        MusicModel.find({
+    const currentMusic = (await MusicModel.findOne({ id: currentId }, { ...projection, "snippet.channelTitle": 1 }).lean())!;
+    const channelTitle = currentMusic.snippet.channelTitle;
+
+    // Get total counts first to calculate proper pagination
+    const [sameChannelTotal, otherChannelsTotal] = await Promise.all([
+        MusicModel.countDocuments({
+            "snippet.channelTitle": channelTitle,
+            id: { $ne: currentId }
+        }),
+        MusicModel.countDocuments({
+            "snippet.channelTitle": { $ne: channelTitle },
+            id: { $ne: currentId }
+        })
+    ]);
+
+    const totalMusics = sameChannelTotal + otherChannelsTotal;
+
+    // Calculate how many items to skip and take from each category
+    let sameChannelSkip = 0;
+    let sameChannelLimit = 0;
+    let otherChannelsSkip = 0;
+    let otherChannelsLimit = 0;
+
+    const totalSkip = (page - 1) * limit;
+
+    if (totalSkip < sameChannelTotal) {
+        // We're still within same-channel results
+        sameChannelSkip = totalSkip;
+        sameChannelLimit = Math.min(limit, sameChannelTotal - sameChannelSkip);
+
+        if (sameChannelLimit < limit) {
+            // We need some results from other channels
+            otherChannelsSkip = 0;
+            otherChannelsLimit = limit - sameChannelLimit;
+        }
+    } else {
+        // We've gone past all same-channel results
+        sameChannelSkip = 0;
+        sameChannelLimit = 0;
+
+        otherChannelsSkip = totalSkip - sameChannelTotal;
+        otherChannelsLimit = limit;
+    }
+
+    // Fetch the appropriate slices of data
+    const [sameChannelMusics, otherChannelsMusics] = await Promise.all([
+        sameChannelLimit > 0 ? MusicModel.find({
             "snippet.channelTitle": channelTitle,
             id: { $ne: currentId }
         }, projection)
-            .limit(limit)
-            .skip(skip)
-            .lean(),
-        MusicModel.countDocuments({ "snippet.channelTitle": channelTitle })
+            .sort({ _id: 1 })
+            .skip(sameChannelSkip)
+            .limit(sameChannelLimit)
+            .lean() : Promise.resolve([]),
+
+        otherChannelsLimit > 0 ? MusicModel.find({
+            "snippet.channelTitle": { $ne: channelTitle },
+            id: { $ne: currentId }
+        }, projection)
+            .sort({ _id: 1 })
+            .skip(otherChannelsSkip)
+            .limit(otherChannelsLimit)
+            .lean() : Promise.resolve([])
     ]);
 
+    // Combine results with same-channel tracks first
+    const combinedMusics = [currentMusic, ...sameChannelMusics, ...otherChannelsMusics];
+
+    const totalPages = Math.ceil(totalMusics / limit);
+
     return {
-        musics,
+        musics: combinedMusics,
         pagination: {
-            totalItems: total,
+            totalItems: totalMusics,
             currentPage: page,
             pageSize: limit,
-            totalPages: Math.ceil(total / limit),
+            totalPages,
+            nextPage: page < totalPages ? page + 1 : null,
+            sameChannelTotal,
+            otherChannelsTotal
         },
+    };
+}
+
+/**
+ * Gets the next track after the current one, sorted by createdAt.
+ * @param currentId The ID of the current track.
+ * @returns The next track data or null if no next track is found.
+ */
+export async function getNextTrackByCreatedAt(currentId: string) {
+    const currentMusic = await MusicModel.findOne({ id: currentId }).lean();
+    if (!currentMusic) {
+        throw new ApiError(404).setError(`Track with ID ${currentId} not found`);
     }
 
+    const nextTrack = await MusicModel.findOne({
+        createdAt: { $lt: currentMusic.createdAt }
+    })
+        .sort({ createdAt: -1 })
+        .lean();
+
+    return nextTrack;
 }
 
 // New function to download and store a single YouTube video

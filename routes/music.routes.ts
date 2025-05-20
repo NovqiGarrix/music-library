@@ -13,6 +13,7 @@ import {
     getPreviousTrack,
     mockSearchResults,
     searchYouTubeVideos,
+    getNextTrackByCreatedAt,
 } from "../services/music.service.ts";
 import { Bindings } from "../types.ts";
 
@@ -159,6 +160,30 @@ musicRoutes.get("/tracks/:id/previous", async (c) => {
     }
 });
 
+// New route to get the next track sorted by createdAt
+musicRoutes.get("/tracks/:id/next_track", async (c) => {
+    try {
+        const id = c.req.param('id');
+        const nextTrack = await getNextTrackByCreatedAt(id);
+
+        if (!nextTrack) {
+            return new ApiError(404).setError("No next track found").toResponse(c);
+        }
+
+        return c.json({
+            status: "OK",
+            data: nextTrack
+        });
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return error.toResponse(c);
+        }
+
+        logger.error(`Error fetching next track by createdAt:`, error);
+        return new ApiError(500).setError("Failed to fetch next track by createdAt").toResponse(c);
+    }
+});
+
 // Updated GET route to support field selection
 musicRoutes.get("/", async (c) => {
     try {
@@ -250,14 +275,14 @@ musicRoutes.get("/mock_search", async (c) => {
 // Route to get next musics from the same channel
 musicRoutes.get("/next", async (c) => {
     try {
-        const { page, limit, currentId, channelTitle, fields } = c.req.query();
+        const { page, limit, currentId, fields } = c.req.query();
 
         // Convert query params to numbers with defaults
         const pageNumber = page ? Number(page) : 1;
         const limitNumber = limit ? Number(limit) : 20;
 
         // Validate required parameters
-        if (!currentId || !channelTitle) {
+        if (!currentId) {
             return new ApiError(400).setError("currentId and channelTitle are required").toResponse(c);
         }
 
@@ -274,7 +299,6 @@ musicRoutes.get("/next", async (c) => {
             page: pageNumber,
             limit: limitNumber,
             currentId,
-            channelTitle,
             fields
         });
 
