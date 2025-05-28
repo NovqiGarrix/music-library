@@ -7,10 +7,7 @@ import {
     downloadAndStoreVideosByPlaylistId,
     getChannels,
     getMusics,
-    getNextMusics,
     getTrackById,
-    getNextTrack,
-    getPreviousTrack,
     mockSearchResults,
     searchYouTubeVideos,
     getNextTrackByCreatedAt,
@@ -105,58 +102,6 @@ musicRoutes.get("/tracks/:id", async (c) => {
 
         logger.error(`Error fetching track:`, error);
         return new ApiError(500).setError("Failed to fetch track").toResponse(c);
-    }
-});
-
-// Route to get the next track after the current one
-musicRoutes.get("/tracks/:id/next", async (c) => {
-    try {
-        const id = c.req.param('id');
-        const { channelTitle, fields } = c.req.query();
-
-        const nextTrack = await getNextTrack(id, channelTitle, fields);
-
-        if (!nextTrack) {
-            return new ApiError(404).setError("No next track found").toResponse(c);
-        }
-
-        return c.json({
-            status: "OK",
-            data: nextTrack
-        });
-    } catch (error) {
-        if (error instanceof ApiError) {
-            return error.toResponse(c);
-        }
-
-        logger.error(`Error fetching next track:`, error);
-        return new ApiError(500).setError("Failed to fetch next track").toResponse(c);
-    }
-});
-
-// Route to get the previous track before the current one
-musicRoutes.get("/tracks/:id/previous", async (c) => {
-    try {
-        const id = c.req.param('id');
-        const { channelTitle, fields } = c.req.query();
-
-        const previousTrack = await getPreviousTrack(id, channelTitle, fields);
-
-        if (!previousTrack) {
-            return new ApiError(404).setError("No previous track found").toResponse(c);
-        }
-
-        return c.json({
-            status: "OK",
-            data: previousTrack
-        });
-    } catch (error) {
-        if (error instanceof ApiError) {
-            return error.toResponse(c);
-        }
-
-        logger.error(`Error fetching previous track:`, error);
-        return new ApiError(500).setError("Failed to fetch previous track").toResponse(c);
     }
 });
 
@@ -271,50 +216,6 @@ musicRoutes.get("/mock_search", async (c) => {
     }
 
 })
-
-// Route to get next musics from the same channel
-musicRoutes.get("/next", async (c) => {
-    try {
-        const { page, limit, currentId, fields } = c.req.query();
-
-        // Convert query params to numbers with defaults
-        const pageNumber = page ? Number(page) : 1;
-        const limitNumber = limit ? Number(limit) : 20;
-
-        // Validate required parameters
-        if (!currentId) {
-            return new ApiError(400).setError("currentId and channelTitle are required").toResponse(c);
-        }
-
-        // Validate pagination parameters
-        if (isNaN(pageNumber) || pageNumber < 1) {
-            return new ApiError(400).setError("Invalid page parameter").toResponse(c);
-        }
-
-        if (isNaN(limitNumber) || limitNumber < 1) {
-            return new ApiError(400).setError("Invalid limit parameter").toResponse(c);
-        }
-
-        const result = await getNextMusics({
-            page: pageNumber,
-            limit: limitNumber,
-            currentId,
-            fields
-        });
-
-        return c.json({
-            status: "OK",
-            data: result.musics,
-            pagination: result.pagination
-        });
-    } catch (error) {
-        if (!(error instanceof ApiError)) {
-            logger.error("Error fetching next musics:");
-            console.error(error);
-        }
-        return new ApiError(500).setError("Failed to fetch next musics").toResponse(c);
-    }
-});
 
 // New route to get all channels with pagination
 musicRoutes.get("/channels", async (c) => {

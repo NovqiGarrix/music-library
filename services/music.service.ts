@@ -205,123 +205,6 @@ interface GetNextMusicsParams {
     fields?: string;
 }
 
-/**
- * 
- * @param params GetNextMusicsParams
- * @returns Next musics
- */
-export async function getNextMusics(params: GetNextMusicsParams) {
-    const { page, fields, currentId } = params;
-
-    // Minus 1, because we want to include the current music in the results
-    const limit = params.limit - 1;
-
-    const projection = parseFieldsToProjection(fields);
-
-    const currentMusic = (await MusicModel.findOne({ id: currentId }, { ...projection, "snippet.channelTitle": 1 }).lean())!;
-    const channelTitle = currentMusic.snippet.channelTitle;
-
-    // Get total counts first to calculate proper pagination
-    const [sameChannelTotal, otherChannelsTotal] = await Promise.all([
-        MusicModel.countDocuments({
-            "snippet.channelTitle": channelTitle,
-            id: { $ne: currentId }
-        }),
-        MusicModel.countDocuments({
-            "snippet.channelTitle": { $ne: channelTitle },
-            id: { $ne: currentId }
-        })
-    ]);
-
-    const totalMusics = sameChannelTotal + otherChannelsTotal;
-
-    // Calculate how many items to skip and take from each category
-    let sameChannelSkip = 0;
-    let sameChannelLimit = 0;
-    let otherChannelsSkip = 0;
-    let otherChannelsLimit = 0;
-
-    const totalSkip = (page - 1) * limit;
-
-    if (totalSkip < sameChannelTotal) {
-        // We're still within same-channel results
-        sameChannelSkip = totalSkip;
-        sameChannelLimit = Math.min(limit, sameChannelTotal - sameChannelSkip);
-
-        if (sameChannelLimit < limit) {
-            // We need some results from other channels
-            otherChannelsSkip = 0;
-            otherChannelsLimit = limit - sameChannelLimit;
-        }
-    } else {
-        // We've gone past all same-channel results
-        sameChannelSkip = 0;
-        sameChannelLimit = 0;
-
-        otherChannelsSkip = totalSkip - sameChannelTotal;
-        otherChannelsLimit = limit;
-    }
-
-    // Fetch the appropriate slices of data
-    const [sameChannelMusics, otherChannelsMusics] = await Promise.all([
-        sameChannelLimit > 0 ? MusicModel.find({
-            "snippet.channelTitle": channelTitle,
-            id: { $ne: currentId }
-        }, projection)
-            .sort({ _id: 1 })
-            .skip(sameChannelSkip)
-            .limit(sameChannelLimit)
-            .lean() : Promise.resolve([]),
-
-        otherChannelsLimit > 0 ? MusicModel.find({
-            "snippet.channelTitle": { $ne: channelTitle },
-            id: { $ne: currentId }
-        }, projection)
-            .sort({ _id: 1 })
-            .skip(otherChannelsSkip)
-            .limit(otherChannelsLimit)
-            .lean() : Promise.resolve([])
-    ]);
-
-    // Combine results with same-channel tracks first
-    const combinedMusics = [currentMusic, ...sameChannelMusics, ...otherChannelsMusics];
-
-    const totalPages = Math.ceil(totalMusics / limit);
-
-    return {
-        musics: combinedMusics,
-        pagination: {
-            totalItems: totalMusics,
-            currentPage: page,
-            pageSize: limit,
-            totalPages,
-            nextPage: page < totalPages ? page + 1 : null,
-            sameChannelTotal,
-            otherChannelsTotal
-        },
-    };
-}
-
-/**
- * Gets the next track after the current one, sorted by createdAt.
- * @param currentId The ID of the current track.
- * @returns The next track data or null if no next track is found.
- */
-export async function getNextTrackByCreatedAt(currentId: string) {
-    const currentMusic = await MusicModel.findOne({ id: currentId }).lean();
-    if (!currentMusic) {
-        throw new ApiError(404).setError(`Track with ID ${currentId} not found`);
-    }
-
-    const nextTrack = await MusicModel.findOne({
-        createdAt: { $lt: currentMusic.createdAt }
-    })
-        .sort({ createdAt: -1 })
-        .lean();
-
-    return nextTrack;
-}
-
 // New function to download and store a single YouTube video
 export async function downloadAndStoreSingleVideo(auth: OAuth2Client, videoId: string) {
 
@@ -529,94 +412,6 @@ export async function mockSearchResults(auth: OAuth2Client) {
 }
 
 /**
- * Gets the next track by the current track ID
- * @param currentTrackId The ID of the current track
- * @param channelTitle Optional channel title to limit results to the same channel
- * @param fields Optional dot notation fields to include in the response
- * @returns The next track or null if there isn't one
- */
-export async function getNextTrack(currentTrackId: string, channelTitle?: string, fields?: string) {
-    const projection = parseFieldsToProjection(fields);
-
-    const query: Record<string, unknown> = { id: { $ne: currentTrackId } };
-
-    // If channelTitle is provided, limit to the same channel
-    if (channelTitle) {
-        query["snippet.channelTitle"] = channelTitle;
-    }
-
-    // Find the current track to get its creation timestamp
-    const currentTrack = await MusicModel.findOne({ id: currentTrackId }).lean();
-    if (!currentTrack) {
-        throw new ApiError(404).setError(`Track with ID ${currentTrackId} not found`);
-    }
-
-    // Find the next track (created after the current track)
-    let nextTrack = await MusicModel.findOne(
-        {
-            ...query,
-            _id: { $gt: currentTrack._id }
-        },
-        projection
-    )
-        .sort({ _id: 1 })
-        .lean();
-
-    // If no next track in the same direction, wrap around to the first track
-    if (!nextTrack) {
-        nextTrack = await MusicModel.findOne(query, projection)
-            .sort({ _id: 1 })
-            .lean();
-    }
-
-    return nextTrack;
-}
-
-/**
- * Gets the previous track by the current track ID
- * @param currentTrackId The ID of the current track
- * @param channelTitle Optional channel title to limit results to the same channel
- * @param fields Optional dot notation fields to include in the response
- * @returns The previous track or null if there isn't one
- */
-export async function getPreviousTrack(currentTrackId: string, channelTitle?: string, fields?: string) {
-    const projection = parseFieldsToProjection(fields);
-
-    const query: Record<string, unknown> = { id: { $ne: currentTrackId } };
-
-    // If channelTitle is provided, limit to the same channel
-    if (channelTitle) {
-        query["snippet.channelTitle"] = channelTitle;
-    }
-
-    // Find the current track to get its creation timestamp
-    const currentTrack = await MusicModel.findOne({ id: currentTrackId }).lean();
-    if (!currentTrack) {
-        throw new ApiError(404).setError(`Track with ID ${currentTrackId} not found`);
-    }
-
-    // Find the previous track (created before the current track)
-    let previousTrack = await MusicModel.findOne(
-        {
-            ...query,
-            _id: { $lt: currentTrack._id }
-        },
-        projection
-    )
-        .sort({ _id: -1 })
-        .lean();
-
-    // If no previous track, wrap around to the last track
-    if (!previousTrack) {
-        previousTrack = await MusicModel.findOne(query, projection)
-            .sort({ _id: -1 })
-            .lean();
-    }
-
-    return previousTrack;
-}
-
-/**
  * Gets all unique channels with pagination
  * @param page The page number (starts from 1)
  * @param limit The number of items per page
@@ -679,4 +474,24 @@ export async function getChannels(page: number, limit: number) {
             nextPage: page < totalPages ? page + 1 : null,
         }
     };
+}
+
+/**
+ * Gets the next track after the current one, sorted by createdAt.
+ * @param currentId The ID of the current track.
+ * @returns The next track data or null if no next track is found.
+ */
+export async function getNextTrackByCreatedAt(currentId: string) {
+    const currentMusic = await MusicModel.findOne({ id: currentId }).lean();
+    if (!currentMusic) {
+        throw new ApiError(404).setError(`Track with ID ${currentId} not found`);
+    }
+
+    const nextTrack = await MusicModel.findOne({
+        createdAt: { $lt: currentMusic.createdAt }
+    })
+        .sort({ createdAt: -1 })
+        .lean();
+
+    return nextTrack;
 }
